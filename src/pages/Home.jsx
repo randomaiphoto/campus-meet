@@ -1,11 +1,11 @@
 import { useState, useEffect } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { useAuth } from "../context/Authcontext";
+import { useAuth } from "../context/AuthContext";
 import { db } from "../firebase";
 import { collection, getDocs, query, where, orderBy, limit } from "firebase/firestore";
 
 export default function Home() {
-  const { currentUser } = useAuth();
+  const { currentUser, logout } = useAuth();
   const navigate = useNavigate();
   const [featuredEvents, setFeaturedEvents] = useState([]);
   const [upcomingEvents, setUpcomingEvents] = useState([]);
@@ -107,98 +107,113 @@ export default function Home() {
     });
   };
 
-  return (
-    <div className="min-h-screen bg-gray-50">
-      {/* Header */}
-      <header className="bg-white shadow-sm">
-        <div className="container mx-auto px-4 py-3 flex justify-between items-center">
-          <Link to="/" className="text-xl font-bold text-indigo-700 flex items-center">
-            CampusMeet<span className="text-indigo-500 ml-1">🎓</span>
-          </Link>
-          
-          <div className="flex-1 max-w-lg mx-6 hidden md:block">
-            <form onSubmit={handleSearch} className="relative">
-              <input
-                type="text"
-                placeholder="Search events, clubs or interests..."
-                className="w-full py-2 pl-10 pr-4 rounded-full border border-gray-300 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-sm"
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-              />
-              <button type="submit" className="absolute left-3 top-2.5 text-gray-400">
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-                </svg>
+  const handleLogout = async () => {
+    try {
+      await logout();
+    } catch (error) {
+      console.error("Failed to log out", error);
+    }
+  };
+
+return (
+  <div className="min-h-screen bg-gray-50">
+    {/* Header */}
+    <header className="bg-white shadow">
+      <div className="max-w-7xl mx-auto py-6 px-4 sm:px-6 lg:px-8 flex justify-between items-center">
+        <h1 className="text-3xl font-bold text-gray-900">Campus Events</h1>
+        <div>
+          {currentUser ? (
+            <div className="flex items-center space-x-4">
+              <span className="text-gray-700">Welcome, {currentUser.email}</span>
+              <button
+                onClick={handleLogout}
+                className="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-md text-sm font-medium"
+              >
+                Logout
               </button>
-            </form>
-          </div>
-          
-          <div className="flex space-x-4 items-center">
-            {currentUser ? (
-              <>
-                <Link to={`/${currentUser.role || 'student'}`} className="text-sm text-indigo-700 hover:text-indigo-900">
-                  Dashboard
+            </div>
+          ) : (
+            <div className="space-x-4">
+              <Link
+                to="/login"
+                className="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-md text-sm font-medium"
+              >
+                Login
+              </Link>
+              <Link
+                to="/register"
+                className="bg-gray-200 hover:bg-gray-300 text-gray-800 px-4 py-2 rounded-md text-sm font-medium"
+              >
+                Register
+              </Link>
+            </div>
+          )}
+        </div>
+      </div>
+    </header>
+    
+    <main>
+      <div className="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
+        <div className="px-4 py-6 sm:px-0">
+          <div className="border-4 border-dashed border-gray-200 rounded-lg p-10 text-center">
+            <h2 className="text-2xl font-bold mb-4">Welcome to Campus Events</h2>
+            <p className="text-gray-600 mb-6">
+              Discover and participate in exciting events happening around your campus.
+            </p>
+            
+            <div className="flex justify-center space-x-4">
+              {currentUser ? (
+                <>
+                  <Link
+                    to="/student"
+                    className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-md text-lg font-medium"
+                  >
+                    Student Dashboard
+                  </Link>
+                  <Link
+                    to="/organizer"
+                    className="bg-green-600 hover:bg-green-700 text-white px-6 py-3 rounded-md text-lg font-medium"
+                  >
+                    Organizer Dashboard
+                  </Link>
+                  <Link
+                    to="/faculty"
+                    className="bg-purple-600 hover:bg-purple-700 text-white px-6 py-3 rounded-md text-lg font-medium"
+                  >
+                    Faculty Dashboard
+                  </Link>
+                </>
+              ) : (
+                <Link
+                  to="/login"
+                  className="bg-indigo-600 hover:bg-indigo-700 text-white px-6 py-3 rounded-md text-lg font-medium"
+                >
+                  Login to Get Started
                 </Link>
-                <Link to="/new-event" className="hidden sm:block text-sm px-4 py-2 rounded bg-indigo-600 text-white hover:bg-indigo-700 transition">
-                  Create Event
-                </Link>
-                <div className="relative group">
-                  <div className="w-8 h-8 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-full flex items-center justify-center text-white text-sm cursor-pointer">
-                    {currentUser.displayName?.charAt(0) || 'U'}
-                  </div>
-                  
-                  <div className="absolute right-0 mt-2 w-48 bg-white rounded-md shadow-lg py-1 z-20 hidden group-hover:block">
-                    <div className="px-4 py-2 text-xs text-gray-500">{currentUser.email}</div>
-                    <hr />
-                    <Link to="/profile" className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">Profile</Link>
-                    <Link to="/saved-events" className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">Saved Events</Link>
-                    <button onClick={() => navigate("/logout")} className="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">
-                      Sign Out
-                    </button>
-                  </div>
-                </div>
-              </>
-            ) : (
-              <>
-                <Link to="/login" className="text-sm text-gray-600 hover:text-indigo-600">
-                  Log in
-                </Link>
-                <Link to="/register" className="text-sm px-4 py-2 rounded-full bg-indigo-600 text-white hover:bg-indigo-700 transition">
-                  Sign up
-                </Link>
-              </>
-            )}
+              )}
+            </div>
           </div>
         </div>
-      </header>
+      </div>
 
-      <main>
-        {/* Hero Banner */}
-        <section className="relative bg-gradient-to-r from-indigo-600 to-purple-600 text-white overflow-hidden">
-          <div className="absolute top-0 left-0 w-full h-full opacity-20">
-            <img 
-              src="https://images.unsplash.com/photo-1523050854058-8df90110c9f1?ixlib=rb-4.0.3&ixid=MnwxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8&auto=format&fit=crop&w=1470&q=80" 
-              alt="Campus background" 
-              className="w-full h-full object-cover"
-            />
-          </div>
-          <div className="container mx-auto px-4 py-16 md:py-24 relative z-10">
-            <div className="max-w-2xl">
-              <h1 className="text-3xl md:text-4xl lg:text-5xl font-bold mb-4">
-                Discover campus events & connections
-              </h1>
-              <p className="text-lg md:text-xl text-indigo-100 mb-6">
-                Join groups, attend events, share memories, and create moments that last beyond graduation.
+      {/* Hero Section */}
+      <section className="bg-gradient-to-b from-indigo-800 to-purple-800 text-white py-20">
+        <div className="container mx-auto px-4">
+          <div className="flex flex-col md:flex-row items-center">
+            <div className="md:w-1/2 mb-10 md:mb-0">
+              <h1 className="text-4xl lg:text-5xl font-bold mb-6">Discover Campus Events</h1>
+              <p className="text-xl text-indigo-100 mb-8">
+                Join, organize, and discover events happening around your campus. Connect with fellow students and make the most of your college experience.
               </p>
-              <div className="flex flex-col sm:flex-row gap-4">
+              <div className="flex flex-wrap gap-4">
                 <Link 
                   to="/events" 
-                  className="px-6 py-3 bg-white text-indigo-700 font-medium rounded-lg hover:bg-indigo-50 transition text-center"
+                  className="px-6 py-3 bg-white text-indigo-800 font-medium rounded-lg hover:bg-indigo-50 transition"
                 >
                   Explore Events
                 </Link>
                 <Link 
-                  to="/register" 
+                  to="/register"
                   className="px-6 py-3 bg-indigo-800 bg-opacity-50 text-white font-medium rounded-lg hover:bg-opacity-70 backdrop-blur-sm transition text-center"
                 >
                   Sign Up
@@ -206,7 +221,8 @@ export default function Home() {
               </div>
             </div>
           </div>
-        </section>
+        </div>
+      </section>
 
         {/* Categories */}
         <section className="container mx-auto px-4 py-10">
