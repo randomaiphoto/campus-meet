@@ -1,7 +1,7 @@
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { AuthProvider } from "./context/AuthContext";
 import Login from "./pages/Login";
-import Register from "./pages/register";
+import Register from "./pages/Register";
 import Home from "./pages/Home";
 import StudentDashboard from "./pages/StudentDashboard";
 import OrganizerDashboard from "./pages/OrganizerDashboard";
