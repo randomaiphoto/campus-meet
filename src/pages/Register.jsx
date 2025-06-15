@@ -1,7 +1,7 @@
 // src/pages/Register.jsx
 import { useEffect, useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
-import { useAuth } from "../context/Authcontext";
+import { useAuth } from "../context/AuthContext";
 
 export default function Register() {
   const [email, setEmail] = useState('');
