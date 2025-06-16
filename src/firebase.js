@@ -2,19 +2,28 @@
 import { initializeApp } from "firebase/app";
 import { getAuth, GoogleAuthProvider } from "firebase/auth";
 import { getFirestore } from "firebase/firestore";
+import { getStorage } from "firebase/storage";
+import { getDatabase } from "firebase/database"; // Added for Realtime Database
 
+// Firebase configuration using Vite environment variables
 const firebaseConfig = {
-  apiKey: "AIzaSyC9rL_fWbfcuDugJ3R_PNwsHTsMbmRdEYE",
-  authDomain: "project-88b11.firebaseapp.com",
-  projectId: "project-88b11",
-  storageBucket: "project-88b11.firebasestorage.app",
-  messagingSenderId: "696039449077",
-  appId: "1:696039449077:web:a6e80300f68c7bfecec0bc",
-  measurementId: "G-SKW38ZCKLL"
+  apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
+  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
+  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID,
+  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET,
+  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
+  appId: import.meta.env.VITE_FIREBASE_APP_ID,
+  measurementId: import.meta.env.VITE_FIREBASE_MEASUREMENT_ID // Optional, but good to have
 };
 
 // Initialize Firebase
 const app = initializeApp(firebaseConfig);
+
+// Export Firebase services
 export const auth = getAuth(app);
 export const db = getFirestore(app);
-export const provider = new GoogleAuthProvider();
+export const storage = getStorage(app); // Added
+export const rtdb = getDatabase(app); // Added
+export const googleProvider = new GoogleAuthProvider(); // Renamed from 'provider' for clarity
+
+export default app; // Optional: export app if needed elsewhere, or remove
