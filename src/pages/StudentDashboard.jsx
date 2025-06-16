@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
+import EventCard from "../../components/EventCard"; // Added EventCard import
 import { db } from "../firebase";
 import { collection, getDocs, query, where, addDoc, serverTimestamp, orderBy, limit } from "firebase/firestore";
 
@@ -123,12 +124,6 @@ export default function StudentDashboard() {
     ? media 
     : media.filter(item => item.eventId === selectedEvent);
 
-  // Add to Calendar function (mock)
-  const addToCalendar = (event) => {
-    alert(`Added ${event.title} to calendar! (This is a mock function)`);
-    // In a real implementation, you'd generate an .ics file here
-  };
-
   // Share media function using Web Share API
   const shareMedia = async (media) => {
     if (navigator.share) {
@@ -243,52 +238,7 @@ export default function StudentDashboard() {
             
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
               {featuredEvents.map((event) => (
-                <div 
-                  key={event.id}
-                  className="bg-white rounded-xl shadow-md overflow-hidden hover:shadow-lg transition-shadow duration-300"
-                >
-                  <div 
-                    className="h-40 bg-gradient-to-r from-indigo-500 to-purple-500 relative"
-                    style={{
-                      backgroundImage: event.imageUrl ? `url(${event.imageUrl})` : '',
-                      backgroundSize: 'cover',
-                      backgroundPosition: 'center'
-                    }}
-                  >
-                    <div className="absolute bottom-0 left-0 right-0 p-4 bg-gradient-to-t from-black/70 to-transparent text-white">
-                      <span className="text-xs font-medium px-2 py-1 bg-indigo-600 rounded-full">Featured</span>
-                      <h3 className="text-lg font-semibold mt-1">{event.title}</h3>
-                    </div>
-                  </div>
-                  
-                  <div className="p-4">
-                    <p className="text-xs text-gray-500 mb-2">
-                      {new Date(event.date?.toDate?.() || event.date).toLocaleString('en-US', {
-                        weekday: 'short',
-                        month: 'short',
-                        day: 'numeric',
-                        hour: '2-digit',
-                        minute: '2-digit'
-                      })}
-                    </p>
-                    <p className="text-sm text-gray-600 line-clamp-2 mb-4">{event.description}</p>
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center text-xs text-gray-500">
-                        <svg className="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
-                        </svg>
-                        {event.location}
-                      </div>
-                      <Link 
-                        to={`/events/${event.id}`} 
-                        className="text-xs text-indigo-600 font-medium hover:text-indigo-800"
-                      >
-                        Details →
-                      </Link>
-                    </div>
-                  </div>
-                </div>
+                <EventCard key={event.id} event={event} featured={true} />
               ))}
             </div>
           </div>
@@ -334,71 +284,7 @@ export default function StudentDashboard() {
               {filteredEvents.length > 0 ? (
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                   {filteredEvents.map((event) => (
-                    <div 
-                      key={event.id}
-                      className="bg-white rounded-xl shadow-md overflow-hidden hover:shadow-lg transition-shadow duration-300"
-                    >
-                      <div 
-                        className="h-40 bg-gradient-to-r from-indigo-500 to-purple-500 relative"
-                        style={{
-                          backgroundImage: event.imageUrl ? `url(${event.imageUrl})` : '',
-                          backgroundSize: 'cover',
-                          backgroundPosition: 'center'
-                        }}
-                      >
-                        <div className="absolute top-0 right-0 p-2">
-                          <button 
-                            onClick={() => addToCalendar(event)}
-                            className="p-2 bg-white/30 backdrop-blur-sm hover:bg-white/50 rounded-full text-white transition"
-                            title="Add to calendar"
-                          >
-                            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                            </svg>
-                          </button>
-                        </div>
-                      </div>
-                      
-                      <div className="p-4">
-                        <div className="flex flex-wrap gap-1 mb-2">
-                          {event.tags?.map((tag, idx) => (
-                            <span 
-                              key={idx}
-                              className="text-xs bg-indigo-100 text-indigo-800 rounded-full px-2 py-0.5"
-                            >
-                              {tag}
-                            </span>
-                          ))}
-                        </div>
-                        
-                        <h3 className="font-medium text-gray-900 mb-1">{event.title}</h3>
-                        <p className="text-xs text-gray-500 mb-2">
-                          {new Date(event.date?.toDate?.() || event.date).toLocaleString('en-US', {
-                            weekday: 'short',
-                            month: 'short',
-                            day: 'numeric',
-                            hour: '2-digit',
-                            minute: '2-digit'
-                          })}
-                        </p>
-                        <p className="text-sm text-gray-600 line-clamp-2 mb-4">{event.description}</p>
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center text-xs text-gray-500">
-                            <svg className="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
-                            </svg>
-                            {event.location}
-                          </div>
-                          <Link 
-                            to={`/events/${event.id}`} 
-                            className="text-xs text-indigo-600 font-medium hover:text-indigo-800"
-                          >
-                            View details →
-                          </Link>
-                        </div>
-                      </div>
-                    </div>
+                    <EventCard key={event.id} event={event} />
                   ))}
                 </div>
               ) : (
