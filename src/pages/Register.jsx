@@ -1,162 +1,478 @@
 // src/pages/Register.jsx
-import { useEffect, useState } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
+import { db } from "../firebase";
+import { collection, query, where, getDocs, setDoc, doc, serverTimestamp } from "firebase/firestore";
+import { toast, Toaster } from 'react-hot-toast';
 
 export default function Register() {
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [confirmPassword, setConfirmPassword] = useState('');
-  const [error, setError] = useState('');
+  const [formData, setFormData] = useState({
+    fullName: "",
+    email: "",
+    mobile: "",
+    course: "",
+    year: "",
+    password: "",
+    confirmPassword: ""
+  });
+  const [errors, setErrors] = useState({});
   const [loading, setLoading] = useState(false);
-  const { currentUser, role, signup } = useAuth();
+  const [flipped, setFlipped] = useState(false);
+  const [currentStep, setCurrentStep] = useState(1);
+  const { signup, currentUser } = useAuth();
   const navigate = useNavigate();
 
   useEffect(() => {
-    if (currentUser && role) {
-      navigate(`/${role}`);
+    if (currentUser) {
+      navigate("/events"); // Changed from /home to /events
     }
-  }, [currentUser, role]);
+  }, [currentUser, navigate]);
 
-  async function handleSubmit(e) {
+  const validateStep1 = () => {
+    const newErrors = {};
+    
+    if (!formData.fullName.trim()) {
+      newErrors.fullName = "Full name is required";
+    }
+    
+    if (!formData.email.trim()) {
+      newErrors.email = "Email is required";
+    } else if (!/\S+@\S+\.\S+/.test(formData.email)) {
+      newErrors.email = "Email is invalid";
+    }
+    
+    if (!formData.mobile.trim()) {
+      newErrors.mobile = "Mobile number is required";
+    } else if (!/^\d{10}$/.test(formData.mobile)) {
+      newErrors.mobile = "Mobile number must be 10 digits";
+    }
+    
+    if (!formData.course) {
+      newErrors.course = "Please select a course";
+    }
+    
+    if (!formData.year) {
+      newErrors.year = "Please select a year";
+    }
+    
+    setErrors(newErrors);
+    return Object.keys(newErrors).length === 0;
+  };
+
+  const validateStep2 = () => {
+    const newErrors = {};
+    
+    if (!formData.password) {
+      newErrors.password = "Password is required";
+    } else if (formData.password.length < 6) {
+      newErrors.password = "Password must be at least 6 characters";
+    }
+    
+    if (formData.password !== formData.confirmPassword) {
+      newErrors.confirmPassword = "Passwords don't match";
+    }
+    
+    setErrors(newErrors);
+    return Object.keys(newErrors).length === 0;
+  };
+
+  const handleChange = (e) => {
+    const { name, value } = e.target;
+    setFormData({
+      ...formData,
+      [name]: value
+    });
+    
+    // Clear error for this field when user types
+    if (errors[name]) {
+      setErrors({
+        ...errors,
+        [name]: null
+      });
+    }
+  };
+
+  const generateUsername = async (fullName) => {
+    // Remove spaces and make lowercase
+    let baseName = fullName.toLowerCase().replace(/\s+/g, '');
+    
+    // Generate random 3-digit number
+    const generateRandomSuffix = () => Math.floor(Math.random() * 900) + 100;
+    
+    let username = `${baseName}${generateRandomSuffix()}`;
+    let isUnique = false;
+    let attempts = 0;
+    
+    // Check if username exists, try up to 5 different suffixes
+    while (!isUnique && attempts < 5) {
+      const usernameQuery = query(
+        collection(db, "users"),
+        where("username", "==", username)
+      );
+      
+      const querySnapshot = await getDocs(usernameQuery);
+      
+      if (querySnapshot.empty) {
+        isUnique = true;
+      } else {
+        username = `${baseName}${generateRandomSuffix()}`;
+        attempts++;
+      }
+    }
+    
+    return username;
+  };
+
+  const nextStep = () => {
+    if (currentStep === 1 && validateStep1()) {
+      setCurrentStep(2);
+    }
+  };
+
+  const prevStep = () => {
+    setCurrentStep(1);
+  };
+
+  const handleSubmit = async (e) => {
     e.preventDefault();
     
-    if (password !== confirmPassword) {
-      return setError('Passwords do not match');
+    if (currentStep === 1) {
+      nextStep();
+      return;
     }
     
+    if (!validateStep2()) return;
+    
     try {
-      setError('');
       setLoading(true);
-      await signup(email, password);
-      navigate('/');
-    } catch (err) {
-      setError('Failed to create an account: ' + err.message);
+      const userCredential = await signup(formData.email, formData.password);
+      const user = userCredential.user;
+      
+      // Generate unique username
+      const username = await generateUsername(formData.fullName);
+      
+      // Store user data in Firestore
+      await setDoc(doc(db, "users", user.uid), {
+        uid: user.uid,
+        fullName: formData.fullName,
+        email: formData.email,
+        mobile: formData.mobile,
+        course: formData.course,
+        year: formData.year,
+        username,
+        role: "student",
+        createdAt: serverTimestamp()
+      });
+      
+      toast.success("Registration successful!");
+      navigate("/events"); // Changed from /home to /events
+    } catch (error) {
+      console.error("Registration error:", error);
+      if (error.code === 'auth/email-already-in-use') {
+        setErrors({ ...errors, email: "Email already in use" });
+        setCurrentStep(1); // Go back to email step
+      } else {
+        toast.error(`Registration failed: ${error.message}`);
+      }
     } finally {
       setLoading(false);
     }
-  }
+  };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-violet-600 to-indigo-700 relative overflow-hidden">
-      {/* Abstract shapes */}
-      <div className="absolute top-0 left-0 w-full h-full z-0">
-        <div className="absolute rounded-full bg-indigo-500/20 w-72 h-72 -top-20 -left-20 backdrop-blur-xl animate-float"></div>
-        <div className="absolute rounded-full bg-purple-500/20 w-96 h-96 -bottom-20 -right-20 backdrop-blur-xl animate-float-delay"></div>
-        <div className="absolute rounded-full bg-violet-500/10 w-80 h-80 bottom-40 left-20 backdrop-blur-sm"></div>
+    <div className="min-h-screen flex items-center justify-center overflow-hidden font-sans bg-gradient-to-br from-blue-800 via-blue-900 to-indigo-900 p-4">
+      <Toaster position="top-right" />
+      <div className="absolute inset-0 overflow-hidden">
+        {/* Animated gradient orbs */}
+        <div className="absolute w-[600px] h-[600px] rounded-full bg-gradient-to-r from-blue-500/20 to-indigo-500/20 blur-3xl animate-float"
+          style={{ 
+            top: '10%',
+            right: '15%'
+          }}
+        ></div>
+        <div className="absolute w-[500px] h-[500px] rounded-full bg-gradient-to-r from-blue-600/20 to-indigo-600/20 blur-3xl animate-float-delay"
+          style={{ 
+            bottom: '5%',
+            left: '10%'
+          }}
+        ></div>
+        
+        {/* Subtle animated grid */}
+        <div className="absolute inset-0 bg-[url('/grid.svg')] bg-center opacity-10"></div>
+        
+        {/* Floating particles */}
+        <div className="particles absolute inset-0">
+          {Array(20).fill().map((_, i) => (
+            <div 
+              key={i}
+              className="absolute w-2 h-2 bg-white rounded-full opacity-30 animate-float"
+              style={{
+                left: `${Math.random() * 100}%`,
+                top: `${Math.random() * 100}%`,
+                animationDelay: `${Math.random() * 5}s`,
+                animationDuration: `${5 + Math.random() * 10}s`
+              }}
+            ></div>
+          ))}
+        </div>
       </div>
       
       {/* Registration card */}
-      <div className="relative z-10 flex flex-col md:flex-row shadow-2xl rounded-3xl overflow-hidden max-w-5xl w-11/12 md:w-3/4 lg:w-2/3 bg-white/10 backdrop-blur-lg border border-white/20">
-        
-        {/* Form side */}
-        <div className="w-full md:w-1/2 p-10 md:p-12 flex flex-col justify-center order-2 md:order-1">
-          <div className="text-center mb-8">
-            <h2 className="text-2xl font-semibold text-white mb-2">Join Campus Central</h2>
-            <p className="text-white/70 text-sm">Create your account to get started</p>
-          </div>
-          
-          {error && <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded">{error}</div>}
-          <form className="mt-8 space-y-6" onSubmit={handleSubmit}>
-            <div className="rounded-md shadow-sm -space-y-px">
-              <div>
-                <label htmlFor="email-address" className="sr-only">Email address</label>
-                <input
-                  id="email-address"
-                  name="email"
-                  type="email"
-                  autoComplete="email"
-                  required
-                  className="appearance-none rounded-none relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-t-md focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 focus:z-10 sm:text-sm"
-                  placeholder="Email address"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                />
-              </div>
-              <div>
-                <label htmlFor="password" className="sr-only">Password</label>
-                <input
-                  id="password"
-                  name="password"
-                  type="password"
-                  autoComplete="new-password"
-                  required
-                  className="appearance-none rounded-none relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 focus:z-10 sm:text-sm"
-                  placeholder="Password"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                />
-              </div>
-              <div>
-                <label htmlFor="confirm-password" className="sr-only">Confirm Password</label>
-                <input
-                  id="confirm-password"
-                  name="confirm-password"
-                  type="password"
-                  autoComplete="new-password"
-                  required
-                  className="appearance-none rounded-none relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-b-md focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 focus:z-10 sm:text-sm"
-                  placeholder="Confirm Password"
-                  value={confirmPassword}
-                  onChange={(e) => setConfirmPassword(e.target.value)}
-                />
+      <div className="relative z-10 max-w-md w-full mx-auto">
+        <div className="backdrop-blur-xl bg-white/10 rounded-3xl shadow-[0_20px_80px_-15px_rgba(0,0,0,0.4)] border border-white/10 overflow-hidden">
+          {/* Card header */}
+          <div className="relative h-32 bg-gradient-to-r from-blue-700/80 to-indigo-800/80 p-8 overflow-hidden">
+            <div className="absolute top-0 left-0 w-full h-full bg-[url('/noise.svg')] opacity-10"></div>
+            <div className="absolute -bottom-12 -right-12 w-40 h-40 bg-white/10 rounded-full"></div>
+            <div className="absolute -bottom-16 -left-16 w-60 h-60 bg-white/10 rounded-full"></div>
+            
+            <div className="relative z-10">
+              <div className="flex items-center space-x-4">
+                <div className="w-12 h-12 rounded-full bg-white/20 backdrop-blur-sm flex items-center justify-center">
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 11c0 3.517-1.009 6.799-2.753 9.571m-3.44-2.04l.054-.09A13.916 13.916 0 008 11a4 4 0 118 0c0 1.017-.07 2.019-.203 3m-2.118 6.844A21.88 21.88 0 0015.171 17m3.839 1.132c.645-2.266.99-4.659.99-7.132A8 8 0 008 4.07M3 15.364c.64-1.319 1-2.8 1-4.364 0-1.457.39-2.823 1.07-4" />
+                  </svg>
+                </div>
+                <div>
+                  <h1 className="text-white text-2xl font-bold tracking-tight">Create Account</h1>
+                  <p className="text-white/70 text-sm mt-1">Step {currentStep} of 2</p>
+                </div>
               </div>
             </div>
-            <div>
-              <button
-                type="submit"
-                disabled={loading}
-                className="group relative w-full flex justify-center py-2 px-4 border border-transparent text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
-              >
-                Sign Up
-              </button>
-            </div>
-          </form>
-          
-          <div className="mt-10 pt-6 border-t border-white/10 text-center">
-            <p className="text-white/40 text-xs">
-              © 2023 Campus Central. All rights reserved.
-            </p>
           </div>
-        </div>
 
-        {/* Image side */}
-        <div className="w-full md:w-1/2 bg-gradient-to-br from-indigo-700 to-violet-800 p-10 flex flex-col justify-center relative overflow-hidden order-1 md:order-2">
-          {/* Shapes */}
-          <div className="absolute -bottom-20 -right-20 w-64 h-64 rounded-full bg-gradient-to-r from-purple-400 to-indigo-400 opacity-20 blur-2xl"></div>
-          <div className="absolute -top-10 -left-10 w-40 h-40 rounded-full bg-gradient-to-r from-violet-400 to-fuchsia-400 opacity-20 blur-xl"></div>
-          
-          <div className="relative z-10 text-white">
-            <h1 className="text-4xl font-bold mb-6">Get Started</h1>
-            <p className="text-lg text-white/80 mb-8">Create your account and join the campus community</p>
-            <div className="space-y-4">
-              <div className="flex items-start space-x-3">
-                <div className="bg-white/20 p-1 rounded-full mt-1">
-                  <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
-                    <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
-                  </svg>
-                </div>
-                <span className="text-sm">Student-friendly interface</span>
-              </div>
-              <div className="flex items-start space-x-3">
-                <div className="bg-white/20 p-1 rounded-full mt-1">
-                  <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
-                    <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
-                  </svg>
-                </div>
-                <span className="text-sm">Register for events with one click</span>
-              </div>
-              <div className="flex items-start space-x-3">
-                <div className="bg-white/20 p-1 rounded-full mt-1">
-                  <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
-                    <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
-                  </svg>
-                </div>
-                <span className="text-sm">Access to exclusive campus resources</span>
-              </div>
+          {/* Registration form */}
+          <div className="p-8 max-h-[65vh] overflow-y-auto">
+            <form onSubmit={handleSubmit} className="space-y-5">
+              {currentStep === 1 ? (
+                // Step 1: Personal Information
+                <>
+                  <div className="space-y-2">
+                    <label htmlFor="fullName" className="text-white text-sm block">
+                      Full Name
+                    </label>
+                    <div className="relative">
+                      <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                        <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-white/50" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                        </svg>
+                      </div>
+                      <input
+                        id="fullName"
+                        name="fullName"
+                        type="text"
+                        value={formData.fullName}
+                        onChange={handleChange}
+                        className={`bg-white/5 border ${errors.fullName ? 'border-red-500' : 'border-white/10'} text-white rounded-xl block w-full pl-10 pr-3 py-3 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent placeholder-white/50`}
+                        placeholder="Enter your full name"
+                      />
+                    </div>
+                    {errors.fullName && <p className="text-red-400 text-xs mt-1">{errors.fullName}</p>}
+                  </div>
+                  
+                  <div className="space-y-2">
+                    <label htmlFor="email" className="text-white text-sm block">
+                      Email Address
+                    </label>
+                    <div className="relative">
+                      <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                        <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-white/50" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 12a4 4 0 10-8 0 4 4 0 008 0zm0 0v1.5a2.5 2.5 0 005 0V12a9 9 0 10-9 9m4.5-1.206a8.959 8.959 0 01-4.5 1.207" />
+                        </svg>
+                      </div>
+                      <input
+                        id="email"
+                        name="email"
+                        type="email"
+                        value={formData.email}
+                        onChange={handleChange}
+                        className={`bg-white/5 border ${errors.email ? 'border-red-500' : 'border-white/10'} text-white rounded-xl block w-full pl-10 pr-3 py-3 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent placeholder-white/50`}
+                        placeholder="Enter your email address"
+                      />
+                    </div>
+                    {errors.email && <p className="text-red-400 text-xs mt-1">{errors.email}</p>}
+                  </div>
+                  
+                  <div className="space-y-2">
+                    <label htmlFor="mobile" className="text-white text-sm block">
+                      Mobile Number
+                    </label>
+                    <div className="relative">
+                      <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                        <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-white/50" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 18h.01M8 21h8a2 2 0 002-2V5a2 2 0 00-2-2H8a2 2 0 00-2 2v14a2 2 0 002 2z" />
+                        </svg>
+                      </div>
+                      <input
+                        id="mobile"
+                        name="mobile"
+                        type="tel"
+                        value={formData.mobile}
+                        onChange={handleChange}
+                        className={`bg-white/5 border ${errors.mobile ? 'border-red-500' : 'border-white/10'} text-white rounded-xl block w-full pl-10 pr-3 py-3 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent placeholder-white/50`}
+                        placeholder="Enter your mobile number"
+                      />
+                    </div>
+                    {errors.mobile && <p className="text-red-400 text-xs mt-1">{errors.mobile}</p>}
+                  </div>
+                  
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <label htmlFor="course" className="text-white text-sm block">
+                        Course
+                      </label>
+                      <select
+                        id="course"
+                        name="course"
+                        value={formData.course}
+                        onChange={handleChange}
+                        className={`bg-white/5 border ${errors.course ? 'border-red-500' : 'border-white/10'} text-white rounded-xl block w-full pl-3 pr-3 py-3 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent appearance-none`}
+                      >
+                        <option value="" disabled className="bg-gray-800">Select Course</option>
+                        <option value="BCA" className="bg-gray-800">BCA</option>
+                        <option value="BBA" className="bg-gray-800">BBA</option>
+                        <option value="BAF" className="bg-gray-800">BAF</option>
+                        <option value="MBA" className="bg-gray-800">MBA</option>
+                      </select>
+                      {errors.course && <p className="text-red-400 text-xs mt-1">{errors.course}</p>}
+                    </div>
+                    
+                    <div className="space-y-2">
+                      <label htmlFor="year" className="text-white text-sm block">
+                        Year
+                      </label>
+                      <select
+                        id="year"
+                        name="year"
+                        value={formData.year}
+                        onChange={handleChange}
+                        className={`bg-white/5 border ${errors.year ? 'border-red-500' : 'border-white/10'} text-white rounded-xl block w-full pl-3 pr-3 py-3 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent appearance-none`}
+                      >
+                        <option value="" disabled className="bg-gray-800">Select Year</option>
+                        <option value="I" className="bg-gray-800">I</option>
+                        <option value="II" className="bg-gray-800">II</option>
+                        <option value="III" className="bg-gray-800">III</option>
+                      </select>
+                      {errors.year && <p className="text-red-400 text-xs mt-1">{errors.year}</p>}
+                    </div>
+                  </div>
+                  
+                  <button
+                    type="button"
+                    onClick={nextStep}
+                    className="w-full py-3 px-4 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-xl shadow-lg transition-colors mt-8"
+                  >
+                    Continue
+                  </button>
+                </>
+              ) : (
+                // Step 2: Password
+                <>
+                  <div className="space-y-2">
+                    <label htmlFor="password" className="text-white text-sm block">
+                      Password
+                    </label>
+                    <div className="relative">
+                      <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                        <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-white/50" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                        </svg>
+                      </div>
+                      <input
+                        id="password"
+                        name="password"
+                        type="password"
+                        value={formData.password}
+                        onChange={handleChange}
+                        className={`bg-white/5 border ${errors.password ? 'border-red-500' : 'border-white/10'} text-white rounded-xl block w-full pl-10 pr-3 py-3 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent placeholder-white/50`}
+                        placeholder="Create a password"
+                      />
+                    </div>
+                    {errors.password && <p className="text-red-400 text-xs mt-1">{errors.password}</p>}
+                  </div>
+                  
+                  <div className="space-y-2">
+                    <label htmlFor="confirmPassword" className="text-white text-sm block">
+                      Confirm Password
+                    </label>
+                    <div className="relative">
+                      <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                        <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-white/50" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                        </svg>
+                      </div>
+                      <input
+                        id="confirmPassword"
+                        name="confirmPassword"
+                        type="password"
+                        value={formData.confirmPassword}
+                        onChange={handleChange}
+                        className={`bg-white/5 border ${errors.confirmPassword ? 'border-red-500' : 'border-white/10'} text-white rounded-xl block w-full pl-10 pr-3 py-3 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent placeholder-white/50`}
+                        placeholder="Confirm your password"
+                      />
+                    </div>
+                    {errors.confirmPassword && <p className="text-red-400 text-xs mt-1">{errors.confirmPassword}</p>}
+                  </div>
+                  
+                  <div className="text-white/70 text-sm p-3 bg-blue-900/20 rounded-lg mt-4">
+                    <p className="flex items-start">
+                      <svg className="h-5 w-5 text-blue-400 mr-2 flex-shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                      </svg>
+                      <span>We'll auto-generate a unique username for you based on your name. You can change it later in settings.</span>
+                    </p>
+                  </div>
+                  
+                  <div className="flex space-x-3 mt-8">
+                    <button
+                      type="button"
+                      onClick={prevStep}
+                      className="w-1/3 py-3 px-4 bg-white/10 hover:bg-white/20 text-white font-medium rounded-xl transition-colors"
+                    >
+                      Back
+                    </button>
+                    <button
+                      type="submit"
+                      disabled={loading}
+                      className="w-2/3 py-3 px-4 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-xl shadow-lg transition-colors disabled:opacity-70"
+                    >
+                      {loading ? (
+                        <div className="flex items-center justify-center">
+                          <svg className="animate-spin -ml-1 mr-2 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                          </svg>
+                          Creating...
+                        </div>
+                      ) : (
+                        "Create Account"
+                      )}
+                    </button>
+                  </div>
+                </>
+              )}
+            </form>
+
+            {/* Sign in link */}
+            <div className="mt-8 pt-6 border-t border-white/20 text-center">
+              <p className="text-white text-sm">
+                Already have an account?{" "}
+                <Link to="/login" className="text-white font-medium hover:text-blue-300 transition-colors">
+                  Sign in here
+                </Link>
+              </p>
             </div>
           </div>
         </div>
+        
+        {/* Card reflection effect */}
+        <div className="mt-1 w-full h-8 bg-gradient-to-b from-white/5 to-transparent rounded-full blur-sm"></div>
+      </div>
+      
+      {/* Footer/Branding */}
+      <div className="absolute bottom-4 left-0 right-0 text-center text-white text-xs">
+        CampusMeet © {new Date().getFullYear()}
       </div>
     </div>
   );
