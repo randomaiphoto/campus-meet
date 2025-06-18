@@ -8,7 +8,7 @@ import {
   GoogleAuthProvider,
   signInWithPopup,
 } from "firebase/auth";
-import { doc, getDoc } from "firebase/firestore";
+import { doc, getDoc, setDoc, serverTimestamp } from "firebase/firestore";
 import { auth, db } from "../firebase";
 
 const AuthContext = createContext();
@@ -18,17 +18,37 @@ export function AuthProvider({ children }) {
   const [userRole, setUserRole] = useState(null);
   const [loading, setLoading] = useState(true);
 
-  // Get user role from Firestore
+  // Enhanced getUserRole function
   const getUserRole = async (uid) => {
     try {
       const userDoc = await getDoc(doc(db, "users", uid));
       if (userDoc.exists()) {
         return userDoc.data().role;
+      } else {
+        // Check if the user is a faculty member by email
+        const user = auth.currentUser;
+        if (user) {
+          const facultyEmails = [
+            "ujwala@gmail.com",
+            "archana@gmail.com",
+            // Add other faculty emails here
+          ];
+
+          if (facultyEmails.includes(user.email)) {
+            // Create faculty user document if it doesn't exist
+            await setDoc(doc(db, "users", uid), {
+              email: user.email,
+              role: "faculty",
+              createdAt: serverTimestamp(),
+            });
+            return "faculty";
+          }
+        }
+        return "student"; // Default role
       }
-      return null;
     } catch (error) {
       console.error("Error getting user role:", error);
-      return null;
+      return "student"; // Default role on error
     }
   };
 

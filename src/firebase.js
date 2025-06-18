@@ -1,20 +1,27 @@
 // Import the functions you need from the SDKs you need
 import { initializeApp } from "firebase/app";
-import { getAuth, GoogleAuthProvider } from "firebase/auth";
+import { getAuth, browserLocalPersistence } from "firebase/auth";
 import { getFirestore } from "firebase/firestore";
 
 const firebaseConfig = {
-  apiKey: "AIzaSyC9rL_fWbfcuDugJ3R_PNwsHTsMbmRdEYE",
-  authDomain: "project-88b11.firebaseapp.com",
-  projectId: "project-88b11",
-  storageBucket: "project-88b11.firebasestorage.app",
-  messagingSenderId: "696039449077",
-  appId: "1:696039449077:web:a6e80300f68c7bfecec0bc",
-  measurementId: "G-SKW38ZCKLL"
+  apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
+  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
+  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID,
+  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET,
+  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
+  appId: import.meta.env.VITE_FIREBASE_APP_ID,
+  measurementId: import.meta.env.VITE_FIREBASE_MEASUREMENT_ID
 };
 
 // Initialize Firebase
 const app = initializeApp(firebaseConfig);
-export const auth = getAuth(app);
+const auth = getAuth(app);
+
+// Set persistence without using async/await
+auth.setPersistence(browserLocalPersistence).catch((error) => {
+  console.error("Auth persistence error:", error);
+});
+
+export { auth };
 export const db = getFirestore(app);
-export const provider = new GoogleAuthProvider();
+export default app;

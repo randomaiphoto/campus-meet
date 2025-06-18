@@ -2,10 +2,9 @@
 import { useState, useEffect } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
-import { db } from "../firebase";
-import { collection, query, where, getDocs } from "firebase/firestore";
+import { db, auth } from "../firebase";
+import { collection, query, where, getDocs, doc, getDoc, setDoc, serverTimestamp } from "firebase/firestore";
 import { signInWithEmailAndPassword } from "firebase/auth";
-import { auth } from "../firebase";
 
 export default function Login() {
   const [identifier, setIdentifier] = useState("");
@@ -23,74 +22,68 @@ export default function Login() {
     }
   }, [currentUser, navigate]);
 
-  // Resolve identifier (username, phone, email) to email
-  const resolveEmail = async (identifier) => {
-    // If identifier looks like an email, return it directly
-    if (identifier.includes("@")) {
-      return identifier;
-    }
-
-    try {
-      // Check if identifier is a username
-      let userQuery = query(
-        collection(db, "users"),
-        where("username", "==", identifier)
-      );
-      
-      let querySnapshot = await getDocs(userQuery);
-      
-      if (!querySnapshot.empty) {
-        return querySnapshot.docs[0].data().email;
-      }
-      
-      // Check if identifier is a phone number
-      userQuery = query(
-        collection(db, "users"),
-        where("phone", "==", identifier)
-      );
-      
-      querySnapshot = await getDocs(userQuery);
-      
-      if (!querySnapshot.empty) {
-        return querySnapshot.docs[0].data().email;
-      }
-      
-      throw new Error("User not found");
-    } catch (error) {
-      console.error("Error resolving email:", error);
-      throw error;
-    }
-  };
-
   const handleTraditionalLogin = async (e) => {
     e.preventDefault();
-    
-    if (!identifier || !password) {
-      setError("Please enter your email/username/phone and password");
-      return;
-    }
     
     try {
       setError("");
       setLoading(true);
-      
-      // Resolve email from identifier
-      const email = await resolveEmail(identifier);
-      
-      // Sign in with email and password
-      await signInWithEmailAndPassword(auth, email, password);
-      
-      navigate("/events"); // Changed from /home to /events
+
+      // Sign in with Firebase Auth
+      const userCredential = await signInWithEmailAndPassword(
+        auth,
+        identifier,
+        password
+      );
+
+      // After successful authentication, check user role in Firestore
+      const userDoc = await getDoc(doc(db, "users", userCredential.user.uid));
+      if (userDoc.exists()) {
+        const userData = userDoc.data();
+        
+        // Redirect based on role
+        switch(userData.role) {
+          case "faculty":
+            navigate("/faculty");
+            break;
+          case "student":
+            navigate("/events");
+            break;
+          case "admin":
+            navigate("/admin");
+            break;
+          default:
+            navigate("/events");
+        }
+      } else {
+        // If user document doesn't exist, create one for faculty accounts
+        if (isFacultyEmail(identifier)) {
+          await setDoc(doc(db, "users", userCredential.user.uid), {
+            email: identifier,
+            role: "faculty",
+            createdAt: serverTimestamp()
+          });
+          navigate("/faculty");
+        } else {
+          navigate("/events"); // Default to student view
+        }
+      }
     } catch (err) {
       console.error("Login error:", err);
-      setError(
-        err.message.includes("User not found")
-          ? "No account found with that email, username, or phone"
-          : "Failed to sign in. Please check your credentials."
-      );
+      setError("Failed to sign in. Please check your credentials.");
     } finally {
       setLoading(false);
     }
+  };
+
+  // Helper function to check if email is a faculty email
+  const isFacultyEmail = (email) => {
+    const facultyEmails = [
+      "ujwala@gmail.com",
+      "archana@gmail.com"
+      // Add other faculty emails here
+    ];
+    return facultyEmails.includes(email);
   };
 
   const handleGoogleLogin = async () => {
@@ -217,6 +210,7 @@ export default function Login() {
                     onChange={(e) => setPassword(e.target.value)}
                     className="bg-white/5 border border-white/10 text-white rounded-xl block w-full pl-10 pr-10 py-3 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent placeholder-white/50"
                     placeholder="Enter your password"
+                    autoComplete="current-password"
                     required
                   />
                   <div className="absolute inset-y-0 right-0 pr-3 flex items-center">
@@ -227,12 +221,12 @@ export default function Login() {
                     >
                       {showPassword ? (
                         <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21" />
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21" />
                         </svg>
                       ) : (
                         <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
                         </svg>
                       )}
                     </button>

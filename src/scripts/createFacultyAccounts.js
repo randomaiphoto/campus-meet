@@ -19,7 +19,8 @@ const facultyAccounts = [
     name: "Ujwala Sharma",
     department: "Computer Science",
     facultyId: "FAC-CS-001",
-    mobile: "9876543210"
+    mobile: "9876543210",
+    role: "faculty"
   },
   {
     email: "archana@gmail.com",
@@ -27,7 +28,8 @@ const facultyAccounts = [
     name: "Archana Patel",
     department: "Business Administration",
     facultyId: "FAC-BA-002",
-    mobile: "9876543211"
+    mobile: "9876543211",
+    role: "faculty"
   }
 ];
 

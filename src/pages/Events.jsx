@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
-import { Link } from "react-router-dom";
+import { useNavigate, Link } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
+import { auth } from "../firebase";
 import { db } from "../firebase";
 import { collection, query, getDocs, where, orderBy } from "firebase/firestore";
 
@@ -9,6 +10,7 @@ export default function Events() {
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState("all");
   const { currentUser } = useAuth();
+  const navigate = useNavigate();
 
   useEffect(() => {
     const fetchEvents = async () => {
@@ -33,6 +35,15 @@ export default function Events() {
 
     fetchEvents();
   }, []);
+
+  const handleSignOut = async () => {
+    try {
+      await auth.signOut();
+      navigate('/login');
+    } catch (error) {
+      console.error("Error signing out:", error);
+    }
+  };
 
   const categories = [
     { id: "all", name: "All Events", icon: "🎯" },
@@ -65,26 +76,25 @@ export default function Events() {
 
             {/* Navigation Items */}
             <div className="flex items-center space-x-4">
-              {/* Host Event Button */}
-              <Link
-                to="/host"
-                className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-xl text-sm font-medium transition-colors flex items-center space-x-2"
-              >
-                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-                </svg>
-                <span>Host Event</span>
-              </Link>
 
-              {/* Notifications */}
-              <button className="relative p-2 text-white hover:bg-white/10 rounded-xl transition-colors">
-                <span className="absolute -top-1 -right-1 w-2 h-2 bg-red-500 rounded-full"></span>
-                <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
-                </svg>
-              </button>
+              <Link to="/host-event"
+                          className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-xl text-sm font-medium transition-colors flex items-center space-x-2"
+                          >
+                          <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                          </svg>
+                          <span className="text-white">Host Event</span>
+                          </Link>
 
-              {/* Profile Dropdown */}
+                          {/* Notifications */}
+                                  <button className="relative p-2 text-white hover:bg-white/10 rounded-xl transition-colors">
+                                  <span className="absolute -top-1 -right-1 w-2 h-2 bg-red-500 rounded-full"></span>
+                                  <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
+                                  </svg>
+                                  </button>
+
+                                  {/* Profile Dropdown */}
               <div className="relative group">
                 <button className="flex items-center space-x-3 p-2 text-white hover:bg-white/10 rounded-xl transition-colors">
                   <div className="w-8 h-8 rounded-full bg-gradient-to-br from-blue-500 to-indigo-500 flex items-center justify-center text-white font-medium">
@@ -101,7 +111,7 @@ export default function Events() {
                     Profile Settings
                   </Link>
                   <button 
-                    onClick={() => auth.signOut()} 
+                    onClick={handleSignOut} 
                     className="w-full text-left px-4 py-2 text-sm text-red-300 hover:bg-white/10 transition-colors"
                   >
                     Sign Out
