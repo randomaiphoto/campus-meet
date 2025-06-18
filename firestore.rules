@@ -11,14 +11,54 @@ service cloud.firestore {
       allow delete: if isAdmin();
     }
     
+    // Helper functions
+    function isAdmin() {
+      return request.auth != null && 
+        exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+    }
+    
+    function isOrganizer() {
+      return request.auth != null && 
+        exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'organizer';
+    }
+    
+    function isFaculty() {
+      return request.auth != null && 
+        exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'faculty';
+    }
+    
+    function isStudent() {
+      return request.auth != null && 
+        exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'student';
+    }
+    
+    // New rules for authenticated access
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+    
+    function isClubLead() {
+      return isAuthenticated() && 
+        exists(/databases/$(database)/documents/clubs) &&
+        get(/databases/$(database)/documents/clubs/{clubId}).data.leadId == request.auth.uid;
+    }
+    
+    // Events availability collection
+    match /eventAvailability/{dateId} {
+      allow read: if isAuthenticated();
+      allow write: if isFaculty() || isClubLead();
+    }
+
     // Events collection
     match /events/{eventId} {
-      allow read: if true; // Anyone can read events
-      allow create: if request.auth != null && (isOrganizer() || isAdmin() || isFaculty());
-      allow update: if request.auth != null && 
-                     (resource.data.createdBy == request.auth.uid || isAdmin() || isFaculty());
-      allow delete: if request.auth != null && 
-                     (resource.data.createdBy == request.auth.uid || isAdmin());
+      allow read: if isAuthenticated();
+      allow create: if isClubLead() || isFaculty();
+      allow update: if isClubLead() || isFaculty();
+      allow delete: if isFaculty();
     }
     
     // Event Requests collection
@@ -50,29 +90,28 @@ service cloud.firestore {
       allow delete: if isAdmin();
     }
     
-    // Helper functions
-    function isAdmin() {
-      return request.auth != null && 
-        exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
-        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+    // Users collection
+    match /users/{userId} {
+      allow read: if isAuthenticated();
+      allow write: if isFaculty() || request.auth.uid == userId;
     }
-    
-    function isOrganizer() {
-      return request.auth != null && 
-        exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
-        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'organizer';
+
+    // Clubs collection
+    match /clubs/{clubId} {
+      allow read: if isAuthenticated();
+      allow write: if isFaculty();
     }
-    
-    function isFaculty() {
-      return request.auth != null && 
-        exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
-        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'faculty';
+
+    // Club membership collection
+    match /club_members/{memberId} {
+      allow read: if isAuthenticated();
+      allow write: if isFaculty();
     }
-    
-    function isStudent() {
-      return request.auth != null && 
-        exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
-        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'student';
+
+    // Club leads collection
+    match /club_leads/{leadId} {
+      allow read: if isAuthenticated();
+      allow write: if isFaculty();
     }
   }
 }

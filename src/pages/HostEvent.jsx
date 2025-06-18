@@ -1,33 +1,40 @@
 import { useState, useEffect } from "react";
-import { useNavigate, Link } from "react-router-dom";
+import { useNavigate, Link, useLocation } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
-import { db } from "../firebase";
+import { db, auth } from "../firebase";
 import { collection, addDoc, doc, getDoc, query, where, getDocs, serverTimestamp } from "firebase/firestore";
 import { toast, Toaster } from 'react-hot-toast';
+import AcademicCalendar from '../components/AcademicCalendar';
+import StudentNavbar from "../components/StudentNavbar";
 
 export default function HostEvent() {
   const [form, setForm] = useState({
     title: "",
-    date: "",
-    time: "",
-    locations: [],
+    location: "", // Changed from locations array to single string
     category: "",
     registrationLink: "",
     clubName: "",
+    selectedDate: null  // Will be set when user selects from calendar
   });
 
   const [loading, setLoading] = useState(false);
   const [availableDates, setAvailableDates] = useState([]);
   const [showCalendar, setShowCalendar] = useState(false);
   const [isClubLead, setIsClubLead] = useState(false);
+  const [userClubs, setUserClubs] = useState([]);
+  const [isAllowed, setIsAllowed] = useState(false);
+  const [selectedDate, setSelectedDate] = useState(null);
+  const [locationAvailability, setLocationAvailability] = useState({});
   const { currentUser } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
 
+  // Organize locations with icons
   const locations = [
-    { id: "lab401", name: "Lab 401" },
-    { id: "lab402", name: "Lab 402" },
-    { id: "lab503", name: "Lab 503" },
-    { id: "seminar", name: "Seminar Hall" }
+    { id: "lab401", name: "Lab 401", icon: "🏫" },
+    { id: "lab402", name: "Lab 402", icon: "🏫" },
+    { id: "lab503", name: "Lab 503", icon: "🏫" },
+    { id: "seminar", name: "Seminar Hall", icon: "🎪" }
   ];
 
   const categories = [
@@ -39,68 +46,122 @@ export default function HostEvent() {
   ];
 
   useEffect(() => {
-    const checkUserRole = async () => {
-      if (!currentUser) {
-        navigate("/login");
-        return;
-      }
+    const checkClubLeadStatus = async () => {
+      if (!currentUser) return;
 
       try {
+        // Check if user is faculty
         const userDoc = await getDoc(doc(db, "users", currentUser.uid));
         const userData = userDoc.data();
-
-        if (!userData?.isClubLead) {
-          toast.error("Only club leads can host events");
-          navigate("/events");
+        
+        if (userData?.role === 'faculty') {
+          setIsAllowed(true);
           return;
         }
 
-        setIsClubLead(true);
-        setForm(prev => ({ ...prev, clubName: userData.clubName }));
+        // Check if user is club lead
+        const clubsQuery = query(
+          collection(db, "clubs"),
+          where("leadId", "==", currentUser.uid)
+        );
+        
+        const querySnapshot = await getDocs(clubsQuery);
+        const clubs = [];
+        querySnapshot.forEach((doc) => {
+          clubs.push({ id: doc.id, ...doc.data() });
+        });
+        
+        setUserClubs(clubs);
+        setIsAllowed(clubs.length > 0);
+
+        // If user is club lead, set their club as default
+        if (clubs.length > 0) {
+          setForm(prev => ({
+            ...prev,
+            clubId: clubs[0].id,
+            clubName: clubs[0].name
+          }));
+        }
       } catch (error) {
-        console.error("Error checking user role:", error);
-        toast.error("Error verifying permissions");
+        console.error("Error checking permissions:", error);
+        toast.error("Error checking permissions");
       }
     };
 
     const fetchAvailableDates = async () => {
       try {
-        // Get all existing events
-        const eventsQuery = query(collection(db, "events"), where("status", "==", "approved"));
-        const eventsSnapshot = await getDocs(eventsQuery);
-        const bookedDates = eventsSnapshot.docs.map(doc => doc.data().date);
+        // First check if user is authenticated
+        if (!currentUser) {
+          throw new Error("Not authenticated");
+        }
 
-        // Generate available dates (next 3 months excluding weekends and booked dates)
-        const dates = [];
-        const today = new Date();
-        const threeMonthsFromNow = new Date(today.getFullYear(), today.getMonth() + 3, today.getDate());
+        const startDate = new Date();
+        const endDate = new Date();
+        endDate.setMonth(endDate.getMonth() + 3); // Look ahead 3 months
 
-        for (let d = today; d <= threeMonthsFromNow; d.setDate(d.getDate() + 1)) {
-          if (d.getDay() !== 0 && d.getDay() !== 6) { // Exclude weekends
-            const dateString = d.toISOString().split('T')[0];
-            if (!bookedDates.includes(dateString)) {
-              dates.push({
-                date: new Date(d),
-                isAvailable: true
-              });
-            }
+        // Fetch booked events
+        const eventsRef = collection(db, "events");
+        const eventsSnap = await getDocs(eventsRef);
+        const bookedDates = {};
+
+        eventsSnap.forEach(doc => {
+          const eventData = doc.data();
+          const eventDate = eventData.date?.toDate?.() || new Date(eventData.date);
+          const dateStr = eventDate.toISOString().split('T')[0];
+          
+          if (!bookedDates[dateStr]) {
+            bookedDates[dateStr] = new Set();
           }
+          if (eventData.location) {
+            bookedDates[dateStr].add(eventData.location);
+          }
+        });
+
+        // Generate available dates
+        const dates = [];
+        const current = new Date(startDate);
+        
+        while (current <= endDate) {
+          const dateStr = current.toISOString().split('T')[0];
+          const isAvailable = !bookedDates[dateStr] || 
+                            bookedDates[dateStr].size < locations.length;
+          
+          dates.push({
+            date: new Date(current),
+            isAvailable,
+            bookedLocations: bookedDates[dateStr] || new Set()
+          });
+
+          current.setDate(current.getDate() + 1);
         }
 
         setAvailableDates(dates);
       } catch (error) {
         console.error("Error fetching available dates:", error);
+        toast.error("Failed to load available dates");
       }
     };
 
-    checkUserRole();
+    checkClubLeadStatus();
     fetchAvailableDates();
   }, [currentUser, navigate]);
 
+  const handleDateSelect = (selectedDate) => {
+    setForm(prev => ({
+      ...prev,
+      selectedDate
+    }));
+    checkLocationAvailability(selectedDate);
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
-    
-    if (!form.title || !form.date || !form.time || form.locations.length === 0) {
+    if (!form.selectedDate) {
+      toast.error("Please select a date from the calendar");
+      return;
+    }
+
+    if (!form.title || !form.location) {
       toast.error("Please fill all required fields");
       return;
     }
@@ -124,6 +185,51 @@ export default function HostEvent() {
       toast.error("Failed to submit event request");
     } finally {
       setLoading(false);
+    }
+  };
+
+  const checkLocationAvailability = async (date) => {
+    try {
+      setSelectedDate(date);
+      
+      // Format date to remove time component
+      const startOfDay = new Date(date);
+      startOfDay.setHours(0, 0, 0, 0);
+      const endOfDay = new Date(date);
+      endOfDay.setHours(23, 59, 59, 999);
+
+      const q = query(
+        collection(db, "events"),
+        where("date", ">=", startOfDay),
+        where("date", "<=", endOfDay),
+        where("status", "==", "approved")
+      );
+      
+      const querySnapshot = await getDocs(q);
+      const bookedLocations = new Set();
+      
+      querySnapshot.forEach((doc) => {
+        const eventData = doc.data();
+        if (eventData.location) {
+          bookedLocations.add(eventData.location);
+        }
+      });
+
+      // Set all locations as available by default
+      const availability = {};
+      locations.forEach(loc => {
+        availability[loc.id] = !bookedLocations.has(loc.id);
+      });
+
+      setLocationAvailability(availability);
+    } catch (error) {
+      console.error("Error checking availability:", error);
+      // Set all locations as available if there's an error
+      const availability = {};
+      locations.forEach(loc => {
+        availability[loc.id] = true;
+      });
+      setLocationAvailability(availability);
     }
   };
 
@@ -155,206 +261,194 @@ export default function HostEvent() {
     </div>
   );
 
-  return (
-    <div className="min-h-screen flex items-center justify-center overflow-hidden font-sans bg-gradient-to-br from-blue-800 via-blue-900 to-indigo-900 p-4">
-      <Toaster position="top-right" />
-      
-      {/* Background effects */}
-      <div className="absolute inset-0 overflow-hidden">
-        {/* Animated gradient orbs */}
-        <div className="absolute w-[600px] h-[600px] rounded-full bg-gradient-to-r from-blue-500/20 to-indigo-500/20 blur-3xl animate-float"
-          style={{ top: '10%', right: '15%' }}
-        ></div>
-        <div className="absolute w-[500px] h-[500px] rounded-full bg-gradient-to-r from-blue-600/20 to-indigo-600/20 blur-3xl animate-float-delay"
-          style={{ bottom: '5%', left: '10%' }}
-        ></div>
-        
-        {/* Grid overlay */}
-        <div className="absolute inset-0 bg-[url('/grid.svg')] bg-center opacity-10"></div>
-        
-        {/* Floating particles */}
-        <div className="particles absolute inset-0">
-          {Array(20).fill().map((_, i) => (
-            <div 
-              key={i}
-              className="absolute w-2 h-2 bg-white rounded-full opacity-30 animate-float"
-              style={{
-                left: `${Math.random() * 100}%`,
-                top: `${Math.random() * 100}%`,
-                animationDelay: `${Math.random() * 5}s`,
-                animationDuration: `${5 + Math.random() * 10}s`
-              }}
-            ></div>
-          ))}
+  // Helper function to check active nav item
+  const isActive = (path) => {
+    return location.pathname === path;
+  };
+
+  if (!isAllowed) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-blue-800 via-blue-900 to-indigo-900 flex items-center justify-center p-4">
+        <div className="bg-white/10 backdrop-blur-xl rounded-xl border border-white/10 p-8 max-w-md w-full text-center">
+          <h2 className="text-2xl font-bold text-white mb-4">Access Denied</h2>
+          <p className="text-white/70 mb-6">
+            Only faculty members and club leads can host events.
+          </p>
+          <Link
+            to="/events"
+            className="inline-block px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+          >
+            Back to Events
+          </Link>
         </div>
       </div>
+    );
+  }
 
-      {/* Main content */}
-      <div className="relative z-10 w-full max-w-md mx-auto">
-        {/* Back button */}
-        <Link 
-          to="/events" 
-          className="flex items-center text-white mb-4 hover:text-white/80 transition-colors"
-        >
-          <svg className="w-5 h-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
-          </svg>
-          Back to Events
-        </Link>
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-blue-800 via-blue-900 to-indigo-900">
+      <Toaster position="top-right" />
+      
+    
 
-        <div className="backdrop-blur-xl bg-white/10 rounded-3xl shadow-[0_20px_80px_-15px_rgba(0,0,0,0.4)] border border-white/10 overflow-hidden">
-          {/* Card header */}
-          <div className="relative h-32 bg-gradient-to-r from-blue-700/80 to-indigo-800/80 p-8">
-            <div className="absolute top-0 left-0 w-full h-full bg-[url('/noise.svg')] opacity-10"></div>
-            <div className="absolute -bottom-12 -right-12 w-40 h-40 bg-white/10 rounded-full"></div>
-            <div className="absolute -bottom-16 -left-16 w-60 h-60 bg-white/10 rounded-full"></div>
+      <StudentNavbar activeItem="hostEvent" />
+
+      {/* Existing content */}
+      <div className="container mx-auto px-4 py-8">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+          {/* Form Section */}
+          <div className="backdrop-blur-xl bg-white/10 rounded-xl border border-white/10 p-6">
+            <h2 className="text-2xl font-semibold text-white mb-6">Host New Event</h2>
             
-            <div className="relative z-10">
-              <div className="flex items-center space-x-4">
-                <div className="w-12 h-12 rounded-full bg-white/20 backdrop-blur-sm flex items-center justify-center">
-                  <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                  </svg>
-                </div>
-                <div>
-                  <h1 className="text-white text-2xl font-bold">Host an Event</h1>
-                  <p className="text-white/70 text-sm">Create and submit your event</p>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* Form */}
-          <form onSubmit={handleSubmit} className="p-8 space-y-6">
-            {/* Event Title */}
-            <div className="space-y-2">
-              <label className="text-white text-sm">Event Title</label>
-              <input
-                type="text"
-                value={form.title}
-                onChange={(e) => setForm({ ...form, title: e.target.value })}
-                className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white placeholder-white/50 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                placeholder="Give your event a name"
-                required
-              />
-            </div>
-
-            {/* Date and Time */}
-            <div className="grid grid-cols-2 gap-4">
+            <form onSubmit={handleSubmit} className="space-y-6">
+              {/* Event Title */}
               <div className="space-y-2">
-                <label className="text-white text-sm">Date</label>
-                <div className="relative">
-                  <input
-                    type="text"
-                    value={form.date}
-                    onFocus={() => setShowCalendar(true)}
-                    onChange={(e) => setForm({ ...form, date: e.target.value })}
-                    className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white placeholder-white/50 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    placeholder="Select a date"
-                    readOnly
-                    required
-                  />
-                  {showCalendar && <Calendar />}
-                </div>
-              </div>
-              <div className="space-y-2">
-                <label className="text-white text-sm">Time</label>
+                <label className="text-white text-sm">Event Title</label>
                 <input
-                  type="time"
-                  value={form.time}
-                  onChange={(e) => setForm({ ...form, time: e.target.value })}
-                  className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  type="text"
+                  value={form.title}
+                  onChange={(e) => setForm({ ...form, title: e.target.value })}
+                  className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white placeholder-white/50"
+                  placeholder="Enter event title"
                   required
                 />
               </div>
-            </div>
 
-            {/* Location */}
-            <div className="space-y-2">
-              <label className="text-white text-sm">Location</label>
-              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-                {locations.map(loc => (
-                  <button
-                    key={loc.id}
-                    type="button"
-                    onClick={() => {
+              {/* Location Dropdown */}
+              <div className="space-y-2">
+                <label className="text-white text-sm">Select Location</label>
+                <select
+                  value={form.location}
+                  onChange={(e) => setForm({ ...form, location: e.target.value })}
+                  className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white appearance-none"
+                  required
+                >
+                  <option value="" className="bg-gray-800">Select a location</option>
+                  {locations.map(location => (
+                    <option 
+                      key={location.id} 
+                      value={location.id}
+                      className="bg-gray-800"
+                    >
+                      {location.icon} {location.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Category Dropdown */}
+              <div className="space-y-2">
+                <label className="text-white text-sm">Select Category</label>
+                <select
+                  value={form.category}
+                  onChange={(e) => setForm({ ...form, category: e.target.value })}
+                  className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white appearance-none"
+                  required
+                >
+                  <option value="" className="bg-gray-800">Select a category</option>
+                  {categories.map(category => (
+                    <option 
+                      key={category.id} 
+                      value={category.id}
+                      className="bg-gray-800"
+                    >
+                      {category.icon} {category.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Registration Link */}
+              <div className="space-y-2">
+                <label className="text-white text-sm">Registration Link (Optional)</label>
+                <input
+                  type="url"
+                  value={form.registrationLink}
+                  onChange={(e) => setForm({ ...form, registrationLink: e.target.value })}
+                  className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white"
+                  placeholder="https://..."
+                />
+              </div>
+
+              {/* Club selection for club leads */}
+              {userClubs.length > 0 && (
+                <div className="mb-4">
+                  <label className="block text-white text-sm font-medium mb-2">
+                    Select Club
+                  </label>
+                  <select
+                    value={form.clubId}
+                    onChange={(e) => {
+                      const club = userClubs.find(c => c.id === e.target.value);
                       setForm(prev => ({
                         ...prev,
-                        locations: prev.locations.includes(loc.id)
-                          ? prev.locations.filter(id => id !== loc.id)
-                          : [...prev.locations, loc.id]
+                        clubId: e.target.value,
+                        clubName: club.name
                       }));
                     }}
-                    className={`flex items-center justify-center space-x-2 p-3 rounded-xl border transition-colors ${
-                      form.locations.includes(loc.id)
-                        ? 'bg-blue-600 border-blue-500'
-                        : 'bg-white/5 border-white/10 hover:bg-white/10'
-                    }`}
+                    className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white"
+                    required
                   >
-                    <span className="text-white text-sm">{loc.name}</span>
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {/* Category */}
-            <div className="space-y-2">
-              <label className="text-white text-sm">Category</label>
-              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-                {categories.map(cat => (
-                  <button
-                    key={cat.id}
-                    type="button"
-                    onClick={() => setForm({ ...form, category: cat.id })}
-                    className={`flex items-center justify-center space-x-2 p-3 rounded-xl border transition-colors ${
-                      form.category === cat.id
-                        ? 'bg-blue-600 border-blue-500'
-                        : 'bg-white/5 border-white/10 hover:bg-white/10'
-                    }`}
-                  >
-                    <span>{cat.icon}</span>
-                    <span className="text-white text-sm">{cat.name}</span>
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {/* Registration Link */}
-            <div className="space-y-2">
-              <label className="text-white text-sm">Registration Link</label>
-              <input
-                type="url"
-                value={form.registrationLink}
-                onChange={(e) => setForm({ ...form, registrationLink: e.target.value })}
-                className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white placeholder-white/50 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                placeholder="Optional: Link for registration or tickets"
-              />
-            </div>
-
-            {/* Submit Button */}
-            <button
-              type="submit"
-              disabled={loading}
-              className="w-full py-3 px-4 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-xl shadow-lg transition-colors disabled:opacity-70"
-            >
-              {loading ? (
-                <div className="flex items-center justify-center">
-                  <svg className="animate-spin -ml-1 mr-2 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                  </svg>
-                  Creating...
+                    {userClubs.map(club => (
+                      <option key={club.id} value={club.id} className="bg-gray-800">
+                        {club.name}
+                      </option>
+                    ))}
+                  </select>
                 </div>
-              ) : (
-                "Create Event"
               )}
-            </button>
-          </form>
-        </div>
 
-        {/* Card reflection */}
-        <div className="mt-1 w-full h-8 bg-gradient-to-b from-white/5 to-transparent rounded-full blur-sm"></div>
+              <button
+                type="submit"
+                className="w-full py-3 px-4 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-xl shadow-lg transition-colors"
+              >
+                Create Event
+              </button>
+            </form>
+          </div>
+
+          {/* Calendar Section */}
+          <div className="sticky top-24">
+            <AcademicCalendar onDateSelect={handleDateSelect} />
+            
+            {/* Location availability will be shown here when a date is selected */}
+            {form.selectedDate && locationAvailability && (
+              <div className="mt-4 backdrop-blur-xl bg-white/10 rounded-xl border border-white/10 p-6">
+                <h3 className="text-lg font-medium text-white mb-4">
+                  Location Availability for {selectedDate.toLocaleDateString()}
+                </h3>
+                
+                <div className="space-y-3">
+                  {locations.map(location => (
+                    <div 
+                      key={location.id}
+                      className="flex items-center justify-between p-3 bg-white/5 rounded-lg border border-white/10"
+                    >
+                      <span className="text-white">{location.name}</span>
+                      <span className={`px-3 py-1 rounded-full text-sm ${
+                        locationAvailability[location.id]
+                          ? 'bg-green-500/20 text-green-400'
+                          : 'bg-red-500/20 text-red-400'
+                      }`}>
+                        {locationAvailability[location.id] ? 'Available' : 'Booked'}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
       </div>
+
+      {/* Modal for date selection */}
+      {showCalendar && (
+        <div className="fixed inset-0 flex items-center justify-center z-50">
+          <div className="absolute inset-0 bg-black opacity-50" onClick={() => setShowCalendar(false)}></div>
+          <Calendar />
+        </div>
+      )}
     </div>
   );
 }
+
