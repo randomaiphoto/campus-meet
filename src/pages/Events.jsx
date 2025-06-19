@@ -4,6 +4,8 @@ import { useAuth } from "../context/AuthContext";
 import { auth } from "../firebase";
 import { db } from "../firebase";
 import { collection, query, getDocs, where, orderBy } from "firebase/firestore";
+import { testFirestoreRead, testFirestoreWrite, troubleshootFirestore } from "../utils/FirestoreDebugger";
+import { toast, Toaster } from 'react-hot-toast';
 
 export default function Events() {
   const [events, setEvents] = useState([]);
@@ -11,21 +13,54 @@ export default function Events() {
   const [filter, setFilter] = useState("all");
   const { currentUser } = useAuth();
   const navigate = useNavigate();
+  const [debugInfo, setDebugInfo] = useState(null);
 
   useEffect(() => {
     const fetchEvents = async () => {
       try {
+        console.log("Creating Firestore query for events");
+        
+        // Test Firestore connection first
+        const readWorks = await testFirestoreRead();
+        if (!readWorks) {
+          // If read fails, get troubleshooting info
+          const troubleshooting = troubleshootFirestore();
+          setDebugInfo(troubleshooting);
+          toast.error("Firebase connection issue detected");
+          setLoading(false);
+          return;
+        }
+        
+        // Try original query if test passed
         const q = query(
           collection(db, "events"),
           where("status", "==", "approved"),
           orderBy("date", "desc")
         );
-        const querySnapshot = await getDocs(q);
-        const eventsData = querySnapshot.docs.map(doc => ({
-          id: doc.id,
-          ...doc.data()
-        }));
-        setEvents(eventsData);
+        
+        try {
+          const querySnapshot = await getDocs(q);
+          const eventsData = querySnapshot.docs.map(doc => ({
+            id: doc.id,
+            ...doc.data()
+          }));
+          setEvents(eventsData);
+        } catch (err) {
+          console.error("Full error object:", err);
+          console.error("If you need to create an index, copy the complete URL from the error message above");
+          
+          // If it's an index error, suggest creating index
+          if (err.message.includes("requires an index")) {
+            toast.error("This query requires an index. Please check console for the index creation URL.");
+          } else {
+            // Otherwise, fall back to test write to check permissions
+            const writeWorks = await testFirestoreWrite();
+            if (!writeWorks) {
+              toast.error("Firebase write permission issue detected");
+            }
+          }
+          throw err;
+        }
       } catch (error) {
         console.error("Error fetching events:", error);
       } finally {
@@ -60,6 +95,7 @@ export default function Events() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-800 via-blue-900 to-indigo-900">
+      <Toaster position="top-right" />
       {/* Updated Navbar */}
       <nav className="bg-white/10 backdrop-blur-md border-b border-white/10 sticky top-0 z-50">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -122,6 +158,23 @@ export default function Events() {
           </div>
         </div>
       </nav>
+
+      {/* Debug panel - only shows if there are issues */}
+      {debugInfo && (
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 mt-4 bg-red-800/20 backdrop-blur-sm rounded-xl border border-red-500/30 text-white">
+          <h3 className="text-lg font-medium mb-2">Firebase Connection Issues Detected</h3>
+          <p className="mb-2">Protocol: {debugInfo.isHttps ? "HTTPS (Good)" : "HTTP (Issue)"}</p>
+          <p className="mb-2">Cookies Enabled: {debugInfo.checkCookies() ? "Yes" : "No (Issue)"}</p>
+          <p className="mb-4">Browser: {debugInfo.browserInfo.userAgent}</p>
+          
+          <h4 className="font-medium mb-2">Try these solutions:</h4>
+          <ol className="list-decimal pl-5 space-y-1">
+            {debugInfo.solutions.map((solution, index) => (
+              <li key={index}>{solution}</li>
+            ))}
+          </ol>
+        </div>
+      )}
 
       {/* Content */}
       <div className="relative z-10">

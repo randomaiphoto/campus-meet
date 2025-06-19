@@ -113,5 +113,11 @@ service cloud.firestore {
       allow read: if isAuthenticated();
       allow write: if isFaculty();
     }
+
+    // Academic Schedules collection - explicitly allow faculty access
+    match /academicSchedules/{scheduleId} {
+      allow read: if isAuthenticated();
+      allow create, update, delete: if isFaculty();
+    }
   }
 }
