@@ -108,13 +108,13 @@ export default function Events() {
                     <p className="text-sm text-white truncate">{currentUser?.email}</p>
                   </div>
                   <Link to="/profile" className="block px-4 py-2 text-sm text-white hover:bg-white/10 transition-colors">
-                    Profile Settings
+                    <span className="text-white">Profile Settings</span>
                   </Link>
                   <button 
                     onClick={handleSignOut} 
                     className="w-full text-left px-4 py-2 text-sm text-red-300 hover:bg-white/10 transition-colors"
                   >
-                    Sign Out
+                    <span className="text-red-400">Sign Out</span>
                   </button>
                 </div>
               </div>

@@ -2,8 +2,9 @@ import { useEffect, useState } from 'react';
 import { collection, addDoc, getDocs, updateDoc, deleteDoc, doc, query, where, getDoc } from 'firebase/firestore';
 import { db } from '../firebase';
 import { toast, Toaster } from 'react-hot-toast';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import FacultyNavbar from '../components/FacultyNavbar';
 
 export default function FacultyClubs() {
   const [clubs, setClubs] = useState([]);
@@ -12,6 +13,7 @@ export default function FacultyClubs() {
   const [showAddModal, setShowAddModal] = useState(false);
   const [selectedClub, setSelectedClub] = useState(null);
   const navigate = useNavigate();
+  const location = useLocation();
   const { currentUser } = useAuth();
 
   const [formData, setFormData] = useState({
@@ -101,9 +103,18 @@ export default function FacultyClubs() {
     }
   };
 
+  // Helper function to check active nav item
+  const isActive = (path) => {
+    return location.pathname === path;
+  };
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-800 via-blue-900 to-indigo-900">
+      
+      
       <Toaster position="top-right" />
+
+      <FacultyNavbar />
       
       {/* Background Effects */}
       <div className="absolute inset-0 overflow-hidden">
@@ -132,20 +143,30 @@ export default function FacultyClubs() {
         ) : clubs.length > 0 ? (
           <>
             {/* Add Club Button when clubs exist */}
-            <div className="flex justify-end mb-6">
-              <button
-                onClick={() => setShowAddModal(true)}
-                className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors flex items-center space-x-2"
-              >
-                <span>Add Club</span>
-                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
-                </svg>
-              </button>
-            </div>
+            
 
-            {/* Clubs Grid */}
+            {/* Clubs Grid with Add Club Card */}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              {/* Add Club Card - First in grid */}
+              <div 
+                onClick={() => setShowAddModal(true)}
+                className="backdrop-blur-xl bg-white/10 rounded-xl border border-white/10 overflow-hidden group cursor-pointer hover:bg-white/20 transition-all duration-300"
+              >
+                <div className="p-6 h-full flex flex-col items-center justify-center text-center">
+                  <div className="w-16 h-16 rounded-full bg-gradient-to-br from-blue-500 to-indigo-500 flex items-center justify-center mb-4 transform group-hover:scale-110 transition-transform duration-300">
+                    <svg className="w-8 h-8 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                    </svg>
+                  </div>
+                  <h3 className="text-xl font-semibold text-white mb-2">Add New Club</h3>
+                  <p className="text-white/70 text-sm">Create a new club and assign a club lead</p>
+                  
+                  {/* Decorative elements */}
+                  <div className="absolute bottom-0 right-0 w-24 h-24 bg-gradient-to-br from-blue-500/20 to-indigo-500/20 rounded-tl-full transform translate-x-8 translate-y-8 group-hover:translate-x-6 group-hover:translate-y-6 transition-transform duration-300"></div>
+                </div>
+              </div>
+
+              {/* Existing Club Cards */}
               {clubs.map(club => (
                 <div key={club.id} className="backdrop-blur-xl bg-white/10 rounded-xl border border-white/10 overflow-hidden group">
                   <div className="p-6">

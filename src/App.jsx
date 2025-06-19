@@ -12,6 +12,7 @@ import HostEvent from "./pages/HostEvent";
 import FacultyClubs from "./pages/FacultyClubs";
 import FacultyList from "./pages/FacultyList";
 import FacultyProfile from "./pages/FacultyProfile";
+import FacultyAcademicCalendar from "./pages/FacultyAcademicCalendar";
 
 function App() {
   return (
@@ -70,6 +71,14 @@ function App() {
             element={
               <ProtectedRoute allowedRoles={["faculty"]}>
                 <FacultyProfile />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/faculty/academic-calendar"
+            element={
+              <ProtectedRoute allowedRoles={["faculty"]}>
+                <FacultyAcademicCalendar />
               </ProtectedRoute>
             }
           />

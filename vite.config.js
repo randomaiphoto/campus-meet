@@ -9,7 +9,7 @@ export default defineConfig({
     tailwindcss(),
   ],
   server: {
-    port: 1350,
+    port: 1352,
     host: true,
   }
 })

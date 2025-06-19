@@ -5,6 +5,7 @@ import { createUserWithEmailAndPassword } from 'firebase/auth';
 import { toast, Toaster } from 'react-hot-toast';
 import { nanoid } from 'nanoid';
 import { useNavigate } from 'react-router-dom';
+import FacultyNavbar from '../components/FacultyNavbar';
 
 export default function FacultyList() {
   const [faculties, setFaculties] = useState([]);
@@ -120,8 +121,13 @@ export default function FacultyList() {
     <div className="min-h-screen bg-gradient-to-br from-blue-800 via-blue-900 to-indigo-900">
       <Toaster position="top-right" />
       
+     
+
       {/* Background Effects */}
       <div className="absolute inset-0 overflow-hidden">
+
+         <FacultyNavbar />
+
         <div className="absolute w-[600px] h-[600px] rounded-full bg-gradient-to-r from-blue-500/20 to-indigo-500/20 blur-3xl animate-float"
           style={{ top: '10%', right: '15%' }}
         ></div>
@@ -134,7 +140,7 @@ export default function FacultyList() {
       {/* Main Content */}
       <div className="relative z-10 container mx-auto px-4 py-8">
         <div className="flex justify-between items-center mb-8">
-          <h1 className="text-3xl font-bold text-white">Faculty Management</h1>
+          
           <button
             onClick={() => setShowAddModal(true)}
             className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors flex items-center space-x-2"
